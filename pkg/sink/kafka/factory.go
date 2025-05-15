@@ -173,6 +173,7 @@ type saramaAsyncProducer struct {
 
 func (p *saramaAsyncProducer) Close() {
 	go func() {
+		close(p.done)
 		// We need to close it asynchronously. Otherwise, we might get stuck
 		// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
 		// Safety:
@@ -280,4 +281,21 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	case p.producer.Input() <- msg:
 	}
 	return nil
+}
+
+func (p *saramaAsyncProducer) keepConnAlive() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			brokers := p.client.Brokers()
+			for _, b := range brokers {
+				_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
+			}
+		case <-p.done:
+			return
+		}
+	}
 }
