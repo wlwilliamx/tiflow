@@ -168,6 +168,7 @@ type saramaAsyncProducer struct {
 	producer     sarama.AsyncProducer
 	changefeedID model.ChangeFeedID
 	failpointCh  chan error
+	done         chan struct{}
 }
 
 func (p *saramaAsyncProducer) Close() {

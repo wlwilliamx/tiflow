@@ -127,12 +127,34 @@ func (f *saramaFactory) AsyncProducer(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &saramaAsyncProducer{
+
+	ap := saramaAsyncProducer{
 		client:       client,
 		producer:     p,
 		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
-	}, nil
+		done:         make(chan struct{}),
+	}
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				brokers := client.Brokers()
+				for _, b := range brokers {
+					_, err := b.Heartbeat(&sarama.HeartbeatRequest{})
+					log.Info("heartbeat to broker", zap.Int32("brokerID", b.ID()), zap.String("addr", b.Addr()), zap.Error(err))
+				}
+			case <-ap.done:
+				return
+			}
+		}
+	}()
+
+	return &ap, nil
 }
 
 func (f *saramaFactory) MetricsCollector(
